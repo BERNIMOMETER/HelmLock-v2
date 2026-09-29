@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from routes.lockers import lockers_bp
 from routes.payment import payment_bp
 from routes.nfc import nfc_bp
@@ -13,6 +13,12 @@ app.wsgi_app = ProxyFix(app.wsgi_app)
 app.register_blueprint(lockers_bp)
 app.register_blueprint(payment_bp)
 app.register_blueprint(nfc_bp)
+
+
+@app.get("/healthz")
+def healthz():
+    """Container/liveness check; does not require Supabase or hardware."""
+    return jsonify({"status": "ok"})
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")

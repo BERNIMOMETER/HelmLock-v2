@@ -1,0 +1,26 @@
+services:
+  helmlock:
+    build:
+      context: .
+    image: helmlock:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SERIAL_PORT: ${SERIAL_DEVICE:-/dev/ttyACM0}
+      BAUD_RATE: ${BAUD_RATE:-115200}
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    devices:
+      - "${SERIAL_DEVICE:-/dev/ttyACM0}:${SERIAL_DEVICE:-/dev/ttyACM0}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

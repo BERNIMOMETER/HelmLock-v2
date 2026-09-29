@@ -1,10 +1,11 @@
 import serial
+import os
 import time
 import threading
 
-SERIAL_PORT = "/dev/cu.usbmodem1201"
-BAUD_RATE   = 115200
-TIMEOUT     = 10
+SERIAL_PORT = os.environ.get("SERIAL_PORT", "/dev/ttyACM0")
+BAUD_RATE   = int(os.environ.get("BAUD_RATE", "115200"))
+TIMEOUT     = int(os.environ.get("SERIAL_TIMEOUT", "10"))
 
 # ── Serial connection (lazy-init so import never crashes) ──────────────────
 _ser: serial.Serial | None = None
