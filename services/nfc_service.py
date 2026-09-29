@@ -1,17 +1,24 @@
 import os
 import uuid
 from services.locker_service import generate_pin, create_rental, now_utc, RENTAL_PRICE
-from supabase import create_client, Client
+from services.db import db_get_nfc_card, db_upsert_nfc_card, db_update_nfc_card, db_get_active_transaction_by_card, db_insert_transaction
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+    Client = object
 
 try:
     from controller.controller import store as ctrl_store, claim as ctrl_claim, nfc_read as ctrl_nfc_read
-    _HW = True
+    _HW = os.environ.get("LOCAL_MODE", "false").lower() not in {"1", "true", "yes", "on"}
 except Exception as e:
     print(f"[NFC Service] Controller unavailable ({e}); physical locker commands disabled.")
     _HW = False
 
 # ── Supabase Client ───────────────────────────────────
 def get_client() -> Client | None:
+    if os.environ.get("LOCAL_MODE", "false").lower() in {"1", "true", "yes", "on"}:
+        return None
     url = os.environ.get("SUPABASE_URL", "")
     key = os.environ.get("SUPABASE_KEY", "")
     if url and key:
@@ -27,6 +34,8 @@ ACCEPTED_COINS = {100, 500, 1000, 2000}  # ₱1, ₱5, ₱10, ₱20
 
 def nfc_get_card(card_uid: str) -> dict | None:
     """Fetch a card record by UID. Returns None if not found."""
+    if os.environ.get("LOCAL_MODE", "false").lower() in {"1", "true", "yes", "on"}:
+        return db_get_nfc_card(card_uid)
     sb = get_client()
     if not sb:
         return None
@@ -44,6 +53,8 @@ def nfc_get_card(card_uid: str) -> dict | None:
 
 def nfc_update_card(card_uid: str, fields: dict) -> bool:
     """Update fields on a card by UID."""
+    if os.environ.get("LOCAL_MODE", "false").lower() in {"1", "true", "yes", "on"}:
+        return db_update_nfc_card(card_uid, fields)
     sb = get_client()
     if not sb:
         return False
@@ -60,6 +71,9 @@ def nfc_update_card(card_uid: str, fields: dict) -> bool:
 
 def nfc_register_card(card_uid: str) -> dict:
     """Register a new NFC card with zero balance."""
+    if os.environ.get("LOCAL_MODE", "false").lower() in {"1", "true", "yes", "on"}:
+        db_upsert_nfc_card(card_uid, {"balance": RENTAL_PRICE, "status": "idle"})
+        return nfc_get_card(card_uid) or {}
     sb = get_client()
     if not sb:
         return {}
@@ -78,6 +92,8 @@ def nfc_get_active_transaction(card_uid: str) -> dict | None:
     Look up the active transaction linked to this card UID.
     Returns the transaction row or None.
     """
+    if os.environ.get("LOCAL_MODE", "false").lower() in {"1", "true", "yes", "on"}:
+        return db_get_active_transaction_by_card(card_uid)
     sb = get_client()
     if not sb:
         return None
@@ -107,7 +123,7 @@ def nfc_process_payment(locker_number: int) -> dict:
     Returns dict with ok, locker, rented_at, expires_at or error.
     """
     # Ask hardware to scan the card
-    card_uid = ctrl_nfc_read() if _HW else ""
+    card_uid = ctrl_nfc_read() if _HW else os.environ.get("MOCK_NFC_UID", "DEMO-NFC-001")
     if not card_uid:
         return {"ok": False, "error": "No card detected. Please tap your card."}
 
@@ -174,7 +190,15 @@ def create_rental_with_card(locker_number: int, card_uid: str, pin: str):
     rented_at  = now_utc()
     expires_at = rented_at + timedelta(hours=SESSION_HOURS)
 
-    if sb:
+    if os.environ.get("LOCAL_MODE", "false").lower() in {"1", "true", "yes", "on"}:
+        db_insert_transaction({
+            "locker_number": locker_number, "payment_method": "nfc", "amount": RENTAL_PRICE,
+            "pin": pin, "card_uid": card_uid, "status": "active",
+            "rented_at": rented_at.isoformat(), "expires_at": expires_at.isoformat(),
+            "retrieved_at": None, "overtime_paid": False, "overtime_amount": 0,
+        })
+        db_set_locker(locker_number, "occupied")
+    elif sb:
         try:
             sb.table("transactions").insert({
                 "locker_number":   locker_number,
@@ -215,7 +239,7 @@ def nfc_process_retrieval() -> dict:
     from services.db import db_set_locker, db_update_transaction
 
     # Ask hardware to scan the card
-    card_uid = ctrl_nfc_read() if _HW else ""
+    card_uid = ctrl_nfc_read() if _HW else os.environ.get("MOCK_NFC_UID", "DEMO-NFC-001")
     if not card_uid:
         return {"ok": False, "error": "No card detected. Please tap your card."}
 

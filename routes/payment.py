@@ -1,5 +1,8 @@
 import os
-import stripe
+try:
+    import stripe
+except ImportError:
+    stripe = None
 from flask import Blueprint, jsonify, render_template, request
 from services.locker_service import (
     is_locker_available, create_rental, check_pin,
@@ -93,6 +96,8 @@ def stripe_webhook():
     sig_header     = request.headers.get("Stripe-Signature", "")
     webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
+    if stripe is None:
+        return jsonify({"error": "Stripe is not installed in local mode."}), 503
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except stripe.error.SignatureVerificationError:
@@ -171,6 +176,9 @@ def api_session_status():
     stored = _session_store.get(session_id, {})
     if stored.get("status") == "paid":
         return jsonify(stored)
+
+    if stripe is None:
+        return jsonify({"status": "pending"})
 
     # Poll Stripe directly
     try:

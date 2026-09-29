@@ -1,7 +1,11 @@
 import os
-import stripe
+try:
+    import stripe
+except ImportError:
+    stripe = None
 
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+if stripe:
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
 BASE_URL     = os.environ.get("BASE_URL", "http://localhost:5000")
 RENTAL_PRICE = 5000   # centavos → ₱50.00

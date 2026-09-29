@@ -11,11 +11,12 @@ from services.db import (
     db_update_transaction,
     db_get_transaction_by_pin,
 )
+import os
 
 # ── Hardware Controller ───────────────────────────────
 try:
     from controller.controller import store as ctrl_store, claim as ctrl_claim
-    _HW = True
+    _HW = os.environ.get("LOCAL_MODE", "false").lower() not in {"1", "true", "yes", "on"}
 except Exception as e:
     print(f"[Service] Controller unavailable ({e}); hardware disabled.")
     _HW = False
